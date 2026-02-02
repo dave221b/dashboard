@@ -9,6 +9,7 @@ import { SignupDto } from './dto/signup.dto';
 import { JwtService } from '@nestjs/jwt';
 import { LoginDto } from './dto/login.dto';
 import * as crypto from 'crypto';
+import { RefreshTokenDto } from './dto/refresh-token.dto';
 
 @Injectable()
 export class AuthService {
@@ -80,4 +81,56 @@ export class AuthService {
       refreshToken,
     };
   }
+
+  async refresh(dto: RefreshTokenDto) {
+    const storedToken = await this.prisma.refreshToken.findUnique({
+      where: { token: dto.refreshToken },
+      include: { user: true },
+    });
+
+    if (
+      !storedToken ||
+      storedToken.revoked ||
+      storedToken.expiresAt < new Date()
+    ) {
+      throw new UnauthorizedException('Invalid refresh token');
+    }
+
+    // Rotate token (important!)
+    await this.prisma.refreshToken.update({
+      where: { id: storedToken.id },
+      data: { revoked: true },
+    });
+
+    const payload = {
+      sub: storedToken.user.id,
+      role: storedToken.user.role,
+    };
+
+    const newAccessToken = await this.jwtService.signAsync(payload);
+    const newRefreshToken = crypto.randomUUID();
+
+    await this.prisma.refreshToken.create({
+      data: {
+        token: newRefreshToken,
+        userId: storedToken.user.id,
+        expiresAt: new Date(Date.now() + 7 * 24 * 60 * 60 * 1000),
+      },
+    });
+
+    return {
+      accessToken: newAccessToken,
+      refreshToken: newRefreshToken,
+    };
+  }
+
+  async logout(refreshToken: string) {
+    await this.prisma.refreshToken.updateMany({
+      where: { token: refreshToken },
+      data: { revoked: true },
+    });
+
+    return { message: 'Logged out successfully' };
+  }
+  
 }
