@@ -9,12 +9,21 @@ export class MetricsService {
   async seed(userId: string) {
     const now = new Date();
 
-    const data = Array.from({ length: 30 }).map((_, i) => ({
-      userId,
-      type: MetricType.ACTIVE_USERS,
-      value: Math.floor(Math.random() * 100) + 20,
-      timestamp: new Date(now.getTime() - i * 86400000),
-    }));
+    const metricTypes = [
+      MetricType.ACTIVE_USERS,
+      MetricType.REVENUE,
+      MetricType.SIGNUPS,
+    ];
+    const data = Array.from({ length: 30 }).flatMap((_, i) => {
+      const timestamp = new Date(now.getTime() - i * 86400000);
+
+      return metricTypes.map((type) => ({
+        userId,
+        type,
+        value: Math.floor(Math.random() * 100) + 20,
+        timestamp,
+      }));
+    });
 
     await this.prisma.metric.createMany({ data });
 
